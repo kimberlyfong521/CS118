@@ -130,18 +130,28 @@ void handle_request(struct server_app *app, int client_socket) {
     // Read the request from HTTP client
     bytes_read = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
     if (bytes_read <= 0) {
+        perror("Failed to read request");
         return;  // Connection closed or error
     }
 
     buffer[bytes_read] = '\0';
-    // copy buffer to a new string
-    char *request = malloc(strlen(buffer) + 1);
-    strcpy(request, buffer);
 
-    // Parse the header and extract essential fields
-    char method[10], path[BUFFER_SIZE], http_version[10];
-    sscanf(buffer, "%s %s %s", method, path, http_version);
-    char file_name[] = "index.html";
+    // Find the end of the request line
+    char *request_line = strtok(buffer, "\r\n");
+    if (request_line == NULL) {
+        fprintf(stderr, "Malformed request: Missing request line\n");
+        return;
+    }
+
+    // Extract method, path, and HTTP version from the request line
+    char *method = strtok(request_line, " ");
+    char *path = strtok(NULL, " ");
+    char *http_version = strtok(NULL, " ");
+
+    if (method == NULL || path == NULL || http_version == NULL) {
+        fprintf(stderr, "Malformed request: Invalid request line\n");
+        return;
+    }
 
     // If the requested path is "/" (root), default to index.html
     if (strcmp(path, "/") == 0) {
