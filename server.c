@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <errno.h>
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
@@ -70,10 +71,9 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    // Set socket options
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
+    // Set socket options (reuse address and port)
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
         perror("setsockopt");
-        exit(EXIT_FAILURE);
     }
 
     address.sin_family = AF_INET;
