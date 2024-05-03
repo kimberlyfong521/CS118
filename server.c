@@ -160,9 +160,7 @@ void handle_request(struct server_app *app, int client_socket) {
     // Free allocated memory
     free(request);
 }
-
 void serve_local_file(int client_socket, const char *path) {
-    
     FILE *file;
     char buffer[1024];
     size_t bytes_read;
@@ -185,42 +183,10 @@ void serve_local_file(int client_socket, const char *path) {
         send(client_socket, buffer, bytes_read, 0);
     }
 
-
-    // Get file size
-    fseek(file, 0L, SEEK_END);
-    long file_size = ftell(file);
-    fseek(file, 0L, SEEK_SET);
-
-    // Determine Content-Type based on file extension
-    const char *content_type;
-    if (strstr(path, ".html") || strstr(path, ".txt")) {
-        content_type = "text/html; charset=UTF-8";
-    } else if (strstr(path, ".jpg")) {
-        content_type = "image/jpeg";
-    } else {
-        content_type = "application/octet-stream";
-    }
-
-    // Prepare HTTP response headers
-    char headers[BUFFER_SIZE];
-    snprintf(headers, sizeof(headers), "HTTP/1.0 200 OK\r\n"
-                                       "Content-Type: %s\r\n"
-                                       "Content-Length: %ld\r\n"
-                                       "\r\n",
-                                       content_type, file_size);
-
-
-
-    // Send file content
-    char buffer[BUFFER_SIZE];
-    size_t bytes_read;
-    while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
-        send(client_socket, buffer, bytes_read, 0);
-    }
-
     // Close the file
     fclose(file);
 }
+
 
 void proxy_remote_file(struct server_app *app, int client_socket, const char *path) {
     int remote_socket;
