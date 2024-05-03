@@ -157,80 +157,100 @@ void handle_request(struct server_app *app, int client_socket) {
 
 void serve_local_file(int client_socket, const char *path) {
     FILE *file;
-    char buffer[1024];
-    size_t bytes_read;
-    long file_size;
+    char *file_extension = strrchr(path, '.');
+    char content_type[50];
 
-    // Open the requested file
+    if (file_extension == NULL) {
+        // Default to plain text if file extension is not provided
+        strcpy(content_type, "text/plain");
+    } else {
+        if (strcmp(file_extension, ".html") == 0 || strcmp(file_extension, ".txt") == 0) {
+            strcpy(content_type, "text/html");
+        } else if (strcmp(file_extension, ".jpg") == 0) {
+            strcpy(content_type, "image/jpeg");
+        } else {
+            // Default to plain text for unknown file types
+            strcpy(content_type, "text/plain");
+        }
+    }
+
     file = fopen(path, "rb");
     if (file == NULL) {
-        // If the file cannot be opened, send a 404 Not Found response
-        const char *not_found_response = "HTTP/1.1 404 Not Found\r\n\r\n";
+        // File not found, return 404 Not Found response
+        char not_found_response[] = "HTTP/1.0 404 Not Found\r\n\r\n";
         send(client_socket, not_found_response, strlen(not_found_response), 0);
         return;
     }
 
-    // Determine the size of the file
     fseek(file, 0, SEEK_END);
-    file_size = ftell(file);
-    fseek(file, 0, SEEK_SET);
+    long file_size = ftell(file);
+    rewind(file);
 
-    // Send HTTP response headers indicating success and the content type based on file extension
-    const char *content_type = "Content-Type: text/plain; charset=UTF-8";
-    if (strstr(path, ".html") || strstr(path, ".htm")) {
-        content_type = "Content-Type: text/html; charset=UTF-8";
-    } else if (strstr(path, ".jpg") || strstr(path, ".jpeg")) {
-        content_type = "Content-Type: image/jpeg";
-    }
-    dprintf(client_socket, "HTTP/1.1 200 OK\r\n%s\r\nContent-Length: %ld\r\n\r\n", content_type, file_size);
+    // Build HTTP response headers
+    char response_headers[200];
+    sprintf(response_headers, "HTTP/1.1 200 OK\r\nContent-Type: %s\r\nContent-Length: %ld\r\n\r\n", content_type, file_size);
+    send(client_socket, response_headers, strlen(response_headers), 0);
 
-    // Read the file contents in chunks and send them to the client
+    // Send file content
+    char buffer[BUFFER_SIZE];
+    size_t bytes_read;
     while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
         send(client_socket, buffer, bytes_read, 0);
     }
 
-    // Close the file
     fclose(file);
 }
 
+void url_decode(char *str) {
+    char *pstr = str, *buf = str;
+    int code, len;
+
+    while (*pstr) {
+        if (*pstr == '%' && sscanf(pstr + 1, "%2x", &code) == 1) {
+            *buf++ = code;
+            pstr += 3;
+        } else {
+            *buf++ = *pstr++;
+        }
+    }
+    *buf = '\0';
+}
+
+// Example usage:
+int main() {
+    char path[] = "ucla%20icon.jpg";
+    url_decode(path);
+    printf("Decoded path: %s\n", path);
+    return 0;
+}
 
 void proxy_remote_file(struct server_app *app, int client_socket, const char *request) {
-    int remote_socket;
-    struct sockaddr_in remote_addr;
-    char buffer[1024];
-    ssize_t bytes_received;
-
-    // Create socket for connecting to remote server
-    remote_socket = socket(AF_INET, SOCK_STREAM, 0);
+    // Connect to remote server
+    int remote_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (remote_socket == -1) {
         perror("socket failed");
         exit(EXIT_FAILURE);
     }
 
-    // Set up address structure for remote server
-    memset(&remote_addr, 0, sizeof(remote_addr));
+    struct sockaddr_in remote_addr;
     remote_addr.sin_family = AF_INET;
     remote_addr.sin_port = htons(app->remote_port);
-    if (inet_pton(AF_INET, app->remote_host, &remote_addr.sin_addr) <= 0) {
-        perror("inet_pton failed");
-        exit(EXIT_FAILURE);
-    }
+    inet_pton(AF_INET, app->remote_host, &remote_addr.sin_addr);
 
-    // Connect to remote server
     if (connect(remote_socket, (struct sockaddr *)&remote_addr, sizeof(remote_addr)) == -1) {
         perror("connect failed");
         exit(EXIT_FAILURE);
     }
 
-    // Forward the original request to the remote server
+    // Forward original request to remote server
     send(remote_socket, request, strlen(request), 0);
 
-    // Pass the response from remote server back to the client
-    while ((bytes_received = recv(remote_socket, buffer, sizeof(buffer), 0)) > 0) {
-        send(client_socket, buffer, bytes_received, 0);
+    // Receive response from remote server and forward it to client
+    char buffer[BUFFER_SIZE];
+    ssize_t bytes_read;
+    while ((bytes_read = recv(remote_socket, buffer, sizeof(buffer), 0)) > 0) {
+        send(client_socket, buffer, bytes_read, 0);
     }
 
-    // Close sockets
     close(remote_socket);
-    close(client_socket);
 }
