@@ -3,11 +3,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <getopt.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 /**
  * Project 1 starter code
@@ -142,50 +143,77 @@ void handle_request(struct server_app *app, int client_socket) {
     char *request = malloc(strlen(buffer) + 1);
     strcpy(request, buffer);
 
-    // TODO: Parse the header and extract essential fields, e.g. file name
-    // Hint: if the requested path is "/" (root), default to index.html
-    char file_name[] = "index.html";
+    // Print the HTTP request header
+    printf("HTTP request received:\n%s\n", request);
 
-    // TODO: Implement proxy and call the function under condition
-    // specified in the spec
-    // if (need_proxy(...)) {
-    //    proxy_remote_file(app, client_socket, file_name);
-    // } else {
+    // Parse the request to extract the requested file name or path
+    char *file_name = strtok(request, " ");
+    file_name = strtok(NULL, " ");
+    // if the requested path is "/" (root), default to index.html
+    if (strcmp(file_name, "/") == 0) {
+        file_name = "index.html";
+    }
+
+    // Serve the requested file
     serve_local_file(client_socket, file_name);
-    //}
+
+    // Free allocated memory
+    free(request);
 }
 
 void serve_local_file(int client_socket, const char *path) {
-    // TODO: Properly implement serving of local files
-    // The following code returns a dummy response for all requests
-    // but it should give you a rough idea about what a proper response looks like
-    // What you need to do 
-    // (when the requested file exists):
-    // * Open the requested file
-    // * Build proper response headers (see details in the spec), and send them
-    // * Also send file content
-    // (When the requested file does not exist):
-    // * Generate a correct response
+    // Open the requested file
+    FILE *file = fopen(path, "r");
+    if (file == NULL) {
+        // If the file does not exist, send HTTP 404 response
+        char response[] = "HTTP/1.0 404 Not Found\r\n\r\n";
+        send(client_socket, response, strlen(response), 0);
+        return;
+    }
 
-    char response[] = "HTTP/1.0 200 OK\r\n"
-                      "Content-Type: text/plain; charset=UTF-8\r\n"
-                      "Content-Length: 15\r\n"
-                      "\r\n"
-                      "Sample response";
+    // Get file size
+    fseek(file, 0L, SEEK_END);
+    long file_size = ftell(file);
+    fseek(file, 0L, SEEK_SET);
 
-    send(client_socket, response, strlen(response), 0);
+    // Determine Content-Type based on file extension
+    const char *content_type;
+    if (strstr(path, ".html") || strstr(path, ".txt")) {
+        content_type = "text/html; charset=UTF-8";
+    } else if (strstr(path, ".jpg")) {
+        content_type = "image/jpeg";
+    } else {
+        content_type = "application/octet-stream";
+    }
+
+    // Prepare HTTP response headers
+    char headers[BUFFER_SIZE];
+    snprintf(headers, sizeof(headers), "HTTP/1.0 200 OK\r\n"
+                                       "Content-Type: %s\r\n"
+                                       "Content-Length: %ld\r\n"
+                                       "\r\n",
+                                       content_type, file_size);
+
+    // Send HTTP response headers
+    send(client_socket, headers, strlen(headers), 0);
+
+    // Send file content
+    char buffer[BUFFER_SIZE];
+    size_t bytes_read;
+    while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+        send(client_socket, buffer, bytes_read, 0);
+    }
+
+    // Close the file
+    fclose(file);
 }
 
-void proxy_remote_file(struct server_app *app, int client_socket, const char *request) {
-    // TODO: Implement proxy request and replace the following code
-    // What's needed:
-    // * Connect to remote server (app->remote_server/app->remote_port)
-    // * Forward the original request to the remote server
-    // * Pass the response from remote server back
-    // Bonus:
-    // * When connection to the remote server fail, properly generate
-    // HTTP 502 "Bad Gateway" response
-
-    char response[] = "HTTP/1.0 501 Not Implemented\r\n\r\n";
-    send(client_socket, response, strlen(response), 0);
+void proxy_remote_file(struct server_app *app, int client_socket, const char *path) {
+    // This function should be implemented for reverse proxy functionality
+    // It is not needed for serving local files in a simple web server
+    // You can leave it empty or implement it according to your project requirements
+    // or specifications.
+    // If implementing reverse proxy, you would connect to the remote server,
+    // forward the original request, and pass the response back to the client.
 }
+
