@@ -162,14 +162,29 @@ void handle_request(struct server_app *app, int client_socket) {
 }
 
 void serve_local_file(int client_socket, const char *path) {
-    // Open the requested file
-    FILE *file = fopen(path, "r");
+    
+    FILE *file;
+    char buffer[1024];
+    size_t bytes_read;
+
+    // Open the binary file in binary read mode
+    file = fopen(path, "rb");
     if (file == NULL) {
-        // If the file does not exist, send HTTP 404 response
-        char response[] = "HTTP/1.0 404 Not Found\r\n\r\n";
-        send(client_socket, response, strlen(response), 0);
+        // If the file cannot be opened, send a 404 Not Found response
+        const char *not_found_response = "HTTP/1.1 404 Not Found\r\n\r\n";
+        send(client_socket, not_found_response, strlen(not_found_response), 0);
         return;
     }
+
+    // Send HTTP response headers indicating success and binary content type
+    const char *http_header = "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\n\r\n";
+    send(client_socket, http_header, strlen(http_header), 0);
+
+    // Read the file contents in chunks and send them to the client
+    while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+        send(client_socket, buffer, bytes_read, 0);
+    }
+
 
     // Get file size
     fseek(file, 0L, SEEK_END);
@@ -194,8 +209,7 @@ void serve_local_file(int client_socket, const char *path) {
                                        "\r\n",
                                        content_type, file_size);
 
-    // Send HTTP response headers
-    send(client_socket, headers, strlen(headers), 0);
+
 
     // Send file content
     char buffer[BUFFER_SIZE];
@@ -209,11 +223,52 @@ void serve_local_file(int client_socket, const char *path) {
 }
 
 void proxy_remote_file(struct server_app *app, int client_socket, const char *path) {
-    // This function should be implemented for reverse proxy functionality
-    // It is not needed for serving local files in a simple web server
-    // You can leave it empty or implement it according to your project requirements
-    // or specifications.
-    // If implementing reverse proxy, you would connect to the remote server,
-    // forward the original request, and pass the response back to the client.
-}
+    int remote_socket;
+    struct sockaddr_in remote_addr;
+    ssize_t bytes_sent, bytes_received;
+    char buffer[1024];
 
+    // Create a socket for the remote server
+    remote_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (remote_socket == -1) {
+        perror("socket creation failed");
+        return;
+    }
+
+    // Set up the address structure for the remote server
+    memset(&remote_addr, 0, sizeof(remote_addr));
+    remote_addr.sin_family = AF_INET;
+    remote_addr.sin_port = htons(app->remote_port);
+    if (inet_pton(AF_INET, app->remote_host, &remote_addr.sin_addr) <= 0) {
+        perror("invalid address or address not supported");
+        close(remote_socket);
+        return;
+    }
+
+    // Connect to the remote server
+    if (connect(remote_socket, (struct sockaddr *)&remote_addr, sizeof(remote_addr)) < 0) {
+        perror("connection to remote server failed");
+        close(remote_socket);
+        return;
+    }
+
+    // Forward the original request to the remote server
+    bytes_sent = send(remote_socket, path, strlen(path), 0);
+    if (bytes_sent <= 0) {
+        perror("sending request to remote server failed");
+        close(remote_socket);
+        return;
+    }
+
+    // Receive the response from the remote server and pass it back to the client
+    while ((bytes_received = recv(remote_socket, buffer, sizeof(buffer), 0)) > 0) {
+        bytes_sent = send(client_socket, buffer, bytes_received, 0);
+        if (bytes_sent <= 0) {
+            perror("sending response to client failed");
+            break;
+        }
+    }
+
+    // Close the sockets
+    close(remote_socket);
+}
