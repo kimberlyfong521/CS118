@@ -128,92 +128,53 @@ void handle_request(struct server_app *app, int client_socket) {
     ssize_t bytes_read;
 
     // Read the request from HTTP client
+    // Note: This code is not ideal in the real world because it
+    // assumes that the request header is small enough and can be read
+    // once as a whole.
+    // However, the current version suffices for our testing.
     bytes_read = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
     if (bytes_read <= 0) {
-        perror("Failed to read request");
         return;  // Connection closed or error
     }
 
     buffer[bytes_read] = '\0';
+    // copy buffer to a new string
+    char *request = malloc(strlen(buffer) + 1);
+    strcpy(request, buffer);
 
-    // Find the end of the request line
-    char *request_line = strtok(buffer, "\r\n");
-    if (request_line == NULL) {
-        fprintf(stderr, "Malformed request: Missing request line\n");
-        return;
-    }
+    // TODO: Parse the header and extract essential fields, e.g. file name
+    // Hint: if the requested path is "/" (root), default to index.html
+    char file_name[] = "index.html";
 
-    // Extract method, path, and HTTP version from the request line
-    char *method = strtok(request_line, " ");
-    char *path = strtok(NULL, " ");
-    char *http_version = strtok(NULL, " ");
-
-    if (method == NULL || path == NULL || http_version == NULL) {
-        fprintf(stderr, "Malformed request: Invalid request line\n");
-        return;
-    }
-
-    // If the requested path is "/" (root), default to index.html
-    if (strcmp(path, "/") == 0) {
-        strcpy(path, "index.html");
-    }
-
-    printf("Request: Method: %s, Path: %s, HTTP Version: %s\n", method, path, http_version);
-
-    // TODO: Implement proxy and call the function under condition specified in the spec
+    // TODO: Implement proxy and call the function under condition
+    // specified in the spec
     // if (need_proxy(...)) {
-    //    proxy_remote_file(app, client_socket, path);
+    //    proxy_remote_file(app, client_socket, file_name);
     // } else {
-    serve_local_file(client_socket, path);
+    serve_local_file(client_socket, file_name);
     //}
 }
 
 void serve_local_file(int client_socket, const char *path) {
-    char buffer[BUFFER_SIZE];
-    FILE *file = fopen(path, "rb");
-    if (file == NULL) {
-        // File not found or cannot be opened
-        fprintf(stderr, "Error: Unable to open file '%s'\n", path);
-        char response[] = "HTTP/1.1 404 Not Found\r\n\r\n";
-        send(client_socket, response, strlen(response), 0);
-        return;
-    }
+    // TODO: Properly implement serving of local files
+    // The following code returns a dummy response for all requests
+    // but it should give you a rough idea about what a proper response looks like
+    // What you need to do 
+    // (when the requested file exists):
+    // * Open the requested file
+    // * Build proper response headers (see details in the spec), and send them
+    // * Also send file content
+    // (When the requested file does not exist):
+    // * Generate a correct response
 
-    // Get file size
-    fseek(file, 0, SEEK_END);
-    long file_size = ftell(file);
-    fseek(file, 0, SEEK_SET);
+    char response[] = "HTTP/1.0 200 OK\r\n"
+                      "Content-Type: text/plain; charset=UTF-8\r\n"
+                      "Content-Length: 15\r\n"
+                      "\r\n"
+                      "Sample response";
 
-    // Determine content type based on file extension
-    const char *content_type = "text/plain";
-    const char *extension = strrchr(path, '.');
-    if (extension != NULL) {
-        if (strcmp(extension, ".html") == 0) {
-            content_type = "text/html";
-        } else if (strcmp(extension, ".jpg") == 0) {
-            content_type = "image/jpeg";
-        }
-    }
-
-    // Build HTTP response headers
-    char response_headers[1024];
-    snprintf(response_headers, sizeof(response_headers),
-             "HTTP/1.1 200 OK\r\n"
-             "Content-Length: %ld\r\n"
-             "Content-Type: %s\r\n"
-             "\r\n",
-             file_size, content_type);
-    send(client_socket, response_headers, strlen(response_headers), 0);
-
-    // Send file content
-    size_t bytes_read;
-    while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
-        send(client_socket, buffer, bytes_read, 0);
-    }
-
-    fclose(file);
+    send(client_socket, response, strlen(response), 0);
 }
-
 
 void proxy_remote_file(struct server_app *app, int client_socket, const char *request) {
     // TODO: Implement proxy request and replace the following code
