@@ -142,7 +142,7 @@ void handle_request(struct server_app *app, int client_socket) {
     char *request = (char *)malloc(strlen(buffer) + 1);
     strcpy(request, buffer);
     const char *get_token = "GET /";
-    char *file_name_start = strstr(request, get_token) + strlen(get_token);
+    char *file_name_start = str(request, get_token) + strlen(get_token);
     char *space_pos = strchr(file_name_start, ' ');
     size_t file_name_len;
     if(space_pos != NULL)
