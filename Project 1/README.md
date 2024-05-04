@@ -1,9 +1,4 @@
-# README
-
-**IMPORTANT**: Before proceeding, ensure you thoroughly read and understand the project specification. The README is just a supplementary guide, while the project specification is the primary source of project requirements and details. Any discrepancies or uncertainties should be addressed based on the content in the project specification.
-
-## Project Description
-
+# Description
 This project is a basic HTTP server, designed to handle requests by either serving local files or proxying remote files. The starter code provides a foundation upon which you can build the necessary logic to serve requests based on their content and the presence of files locally.
 
 ## File Structure
@@ -32,7 +27,7 @@ To build the project, ensure you have `gcc` installed on your system. Navigate t
 After compiling, you can run the server using the following command:
 
 ```bash
-./server [-b local_port] [-r remote_host] [-p remote_port]
+./server
 ```
 
 ### Command-line Arguments:
