@@ -8,7 +8,6 @@
 #include <getopt.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
-#include <netdb.h> 
 
 /**
  * Project 1 starter code
@@ -139,128 +138,172 @@ void handle_request(struct server_app *app, int client_socket) {
     }
 
     buffer[bytes_read] = '\0';
-   // Parse the HTTP request header to extract the requested file name
-    char *file_name = NULL;
-    char *request_line = strtok(buffer, "\r\n"); // Extract the first line of the request
-    if (request_line != NULL) {
-        // Find start of file path after get
-        char *path_start = strstr(request_line, "GET ");
-        if (path_start != NULL) {
-            path_start += strlen("GET "); // move pointer to start of path
-            // Find end of path
-            char *path_end = strchr(path_start, ' ');
-            if (path_end != NULL) {
-                // Allocate memory for the file name
-                file_name = malloc(path_end - path_start + 1);
-                if (file_name != NULL) {
-                    // Copy the file path to the file_name variable
-                    strncpy(file_name, path_start, path_end - path_start);
-                    file_name[path_end - path_start] = '\0';
-                }
-            }
+    // copy buffer to a new string
+    char *request = (char *)malloc(strlen(buffer) + 1);
+    strcpy(request, buffer);
+    const char *get_token = "GET /";
+    char *file_name_start = strstr(request, get_token) + strlen(get_token);
+    char *space_pos = strchr(file_name_start, ' ');
+    size_t file_name_len;
+    if(space_pos != NULL)
+        file_name_len = space_pos - file_name_start;
+    else
+        file_name_len = strlen(file_name_start);
+
+    char file_name[file_name_len + 1];
+    strncpy(file_name, file_name_start, file_name_len);
+    file_name[file_name_len] = '\0';
+
+    // TODO: Parse the header and extract essential fields, e.g. file name
+    // Hint: if the requested path is "/" (root), default to index.html
+   // char file_name[] = "index.html";
+
+    if (strcmp(file_name, "") == 0) {
+    strcpy(file_name, "index.html");
+    } 
+    else {
+        char space_encoding[] = "%20";
+        char percent_encoding[] = "%25";
+
+        char *found = strstr(file_name, space_encoding);
+        while (found != NULL) {
+            strcpy(found, " ");
+            found = strstr(file_name, space_encoding);
+        }
+
+        found = strstr(file_name, percent_encoding);
+        while (found != NULL) {
+            strcpy(found, "%");
+            found = strstr(file_name, percent_encoding);
         }
     }
 
-    // default index.html
-    if (file_name == NULL || strcmp(file_name, "/") == 0) {
-        file_name = strdup("index.html");
-    }
+    // TODO: Implement proxy and call the function under condition
+    // specified in the spec
+    // if (need_proxy(...)) {
+    //    proxy_remote_file(app, client_socket, file_name);
+    // } else {
+    
+    char remoteEnd[] = ".ts";
+    size_t remoteEndLen = strlen(remoteEnd);
 
-    // Decide whether to serve the file locally or proxy the request
-    if (strcasecmp(file_name + strlen(file_name) - 4, ".txt") == 0 ||
-        strcasecmp(file_name + strlen(file_name) - 5, ".html") == 0 ||
-        strcasecmp(file_name + strlen(file_name) - 4, ".jpg") == 0) {
-        proxy_remote_file(app, client_socket, file_name);
-    } else {
+    if (!(strlen(file_name) >= 3 &&
+        strncmp(remoteEnd, file_name + strlen(file_name) - remoteEndLen, remoteEndLen) == 0)) {
         serve_local_file(client_socket, file_name);
+    } else {
+        proxy_remote_file(app, client_socket, request);
     }
-
-    // Free allocated memory for file_name
-    free(file_name);
-}
+    
+    }
 
 void serve_local_file(int client_socket, const char *path) {
-    // Open the requested file
+    // TODO: Properly implement serving of local files
+    // The following code returns a dummy response for all requests
+    // but it should give you a rough idea about what a proper response looks like
+    // What you need to do 
+    // (when the requested file exists):
+    // * Open the requested file
+    // * Build proper response headers (see details in the spec), and send them
+    // * Also send file content
+    // (When the requested file does not exist):
+    // * Generate a correct response
+
     FILE *file = fopen(path, "rb");
-    if (file == NULL) {
-        // If the file does not exist, generate a correct response
-        char response[] = "HTTP/1.0 404 Not Found\r\n"
-                          "Content-Type: text/html\r\n"
-                          "\r\n"
-                          "<html><body><h1>404 Not Found</h1></body></html>";
+    if (!file) {
+        char response[] =
+            "HTTP/1.0 404 Not Found\r\n"
+            "Content-Type: text/plain; charset=UTF-8\r\n"
+            "Content-Length: 13\r\n"
+            "\r\n"
+            "404 Not Found";
         send(client_socket, response, strlen(response), 0);
         return;
     }
 
-    // Get the file size
+    const char *mime_type_start = NULL;
+    for (int i = 0; path[i] != '\0'; ++i) {
+        if (path[i] == '.') {
+            mime_type_start = &path[i];
+        }
+    }
+
+    char content_type[50] = "application/octet-stream";
+    if (mime_type_start != NULL) {
+        char mime_type[10];
+        strcpy(mime_type, mime_type_start + 1);
+        if (strcmp(mime_type, "txt") == 0) {
+            strcpy(content_type, "text/plain; charset=UTF-8");
+        } else if (strcmp(mime_type, "html") == 0) {
+            strcpy(content_type, "text/html");
+        } else if (strcmp(mime_type, "jpg") == 0) {
+            strcpy(content_type, "image/jpg");
+        }
+    }
+
+    char response[1024];
+    sprintf(response, "HTTP/1.0 200 OK\r\nContent-Type: %s\r\n", content_type);
+
     fseek(file, 0, SEEK_END);
-    size_t file_size = ftell(file);
+    long file_length = ftell(file);
     fseek(file, 0, SEEK_SET);
+    sprintf(response + strlen(response), "Content-Length: %ld\r\n\r\n", file_length);
 
-    // Build proper response headers
-    char headers[BUFFER_SIZE];
-    snprintf(headers, BUFFER_SIZE, "HTTP/1.0 200 OK\r\n"
-                                    "Content-Type: text/plain; charset=UTF-8\r\n"
-                                    "Content-Length: %zu\r\n"
-                                    "\r\n", file_size);
-    send(client_socket, headers, strlen(headers), 0);
+    send(client_socket, response, strlen(response), 0);
 
-    // Send file content
-    char buffer[BUFFER_SIZE];
+    char buffer[1024];
     size_t bytes_read;
-    while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, file)) > 0) {
+    while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
         send(client_socket, buffer, bytes_read, 0);
     }
 
     fclose(file);
 }
-
-
 void proxy_remote_file(struct server_app *app, int client_socket, const char *request) {
-    // Connect to the remote server
-    int backend_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (backend_socket == -1) {
+    // TODO: Implement proxy request and replace the following code
+    // What's needed:
+    // * Connect to remote server (app->remote_server/app->remote_port)
+    // * Forward the original request to the remote server
+    // * Pass the response from remote server back
+    // Bonus:
+    // * When connection to the remote server fail, properly generate
+    // HTTP 502 "Bad Gateway" response
+
+    int remote_socket;
+    struct sockaddr_in remote_addr;
+
+    remote_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (remote_socket == -1) {
         perror("socket failed");
         exit(EXIT_FAILURE);
     }
 
-    struct sockaddr_in backend_addr;
-    memset(&backend_addr, 0, sizeof(backend_addr));
-    backend_addr.sin_family = AF_INET;
-    backend_addr.sin_port = htons(app->remote_port);
+    remote_addr.sin_family = AF_INET;
+    remote_addr.sin_port = htons(app->remote_port);
+    remote_addr.sin_addr.s_addr = inet_addr(app->remote_host);
 
-    struct hostent *backend_host = gethostbyname(app->remote_host);
-    if (backend_host == NULL) {
-        perror("gethostbyname failed");
-        exit(EXIT_FAILURE);
-    }
-    memcpy(&backend_addr.sin_addr.s_addr, backend_host->h_addr, backend_host->h_length);
-
-    if (connect(backend_socket, (struct sockaddr *)&backend_addr, sizeof(backend_addr)) == -1) {
-        perror("connect failed");
-        exit(EXIT_FAILURE);
+    int status = connect(remote_socket, (struct sockaddr *)&remote_addr, sizeof(remote_addr));
+    if (status == -1) {
+        char response[] = "HTTP/1.0 502 Bad Gateway\r\n\r\n";
+        send(client_socket, response, strlen(response), 0);
+        return;
     }
 
-    // Forward the original request to the remote server
-    if (send(backend_socket, request, strlen(request), 0) == -1) {
-        perror("send failed");
-        exit(EXIT_FAILURE);
-    }
+    send(remote_socket, request, strlen(request), 0);
+    printf("Forwarding Request To Remote Server\n");
 
-    // Pass the response from the remote server back to the client
-    char buffer[BUFFER_SIZE];
-    ssize_t bytes_received;
-    while ((bytes_received = recv(backend_socket, buffer, sizeof(buffer), 0)) > 0) {
-        if (send(client_socket, buffer, bytes_received, 0) == -1) {
+    char buff[BUFFER_SIZE];
+    int bytesRead, bytesSent;
+    while ((bytesRead = read(remote_socket, buff, BUFFER_SIZE)) > 0) {
+        bytesSent = send(client_socket, buff, bytesRead, 0);
+        if (bytesSent < 0) {
             perror("send failed");
-            exit(EXIT_FAILURE);
+            break;
         }
     }
-    //failll
-    if (bytes_received == -1) {
-        perror("recv failed");
-        exit(EXIT_FAILURE);
+
+    if (bytesRead < 0) {
+        perror("read failed");
     }
 
-    close(backend_socket);
+    close(remote_socket);
 }
