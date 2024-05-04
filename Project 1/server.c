@@ -278,7 +278,7 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
 
     int status = connect(remote_socket, (struct sockaddr *)&remote_addr, sizeof(remote_addr));
     if (status == -1) {
-        char response[] = "HTTP 502 Bad Gateway\r\n\r\n";
+        char response[] = "HTTP/1.0 502 BAD GATEWAY\r\n\r\n";
         send(client_socket, response, strlen(response), 0);
         return;
     }
