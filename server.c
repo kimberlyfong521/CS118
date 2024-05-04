@@ -180,26 +180,39 @@ void handle_request(struct server_app *app, int client_socket) {
 }
 
 void serve_local_file(int client_socket, const char *path) {
-    // TODO: Properly implement serving of local files
-    // The following code returns a dummy response for all requests
-    // but it should give you a rough idea about what a proper response looks like
-    // What you need to do 
-    // (when the requested file exists):
-    // * Open the requested file
-    
-    // * Build proper response headers (see details in the spec), and send them
-    // * Also send file content
-    // (When the requested file does not exist):
-    // * Generate a correct response
+    // Open the requested file
+    FILE *file = fopen(path, "rb");
+    if (file == NULL) {
+        // If the file does not exist, generate a correct response
+        char response[] = "HTTP/1.0 404 Not Found\r\n"
+                          "Content-Type: text/html\r\n"
+                          "\r\n"
+                          "<html><body><h1>404 Not Found</h1></body></html>";
+        send(client_socket, response, strlen(response), 0);
+        return;
+    }
 
+    // Get the file size
+    fseek(file, 0, SEEK_END);
+    size_t file_size = ftell(file);
+    fseek(file, 0, SEEK_SET);
 
-    char response[] = "HTTP/1.0 200 OK\r\n"
-                      "Content-Type: text/plain; charset=UTF-8\r\n"
-                      "Content-Length: 15\r\n"
-                      "\r\n"
-                      "Sample response";
+    // Build proper response headers
+    char headers[BUFFER_SIZE];
+    snprintf(headers, BUFFER_SIZE, "HTTP/1.0 200 OK\r\n"
+                                    "Content-Type: text/plain; charset=UTF-8\r\n"
+                                    "Content-Length: %zu\r\n"
+                                    "\r\n", file_size);
+    send(client_socket, headers, strlen(headers), 0);
 
-    send(client_socket, response, strlen(response), 0);
+    // Send file content
+    char buffer[BUFFER_SIZE];
+    size_t bytes_read;
+    while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, file)) > 0) {
+        send(client_socket, buffer, bytes_read, 0);
+    }
+
+    fclose(file);
 }
 
 
