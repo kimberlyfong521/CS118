@@ -9,11 +9,6 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
-/**
- * Project 1 starter code
- * All parts needed to be changed/added are marked with TODO
- */
-
 #define BUFFER_SIZE 1024
 #define DEFAULT_SERVER_PORT 8081
 #define DEFAULT_REMOTE_HOST "131.179.176.34"

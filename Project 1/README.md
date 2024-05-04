@@ -48,7 +48,3 @@ To complete this project, consider addressing the following TODOs:
 ## Notes
 
 The starter code assumes that the HTTP request header is small enough to be read once as a whole, which may not be ideal in a real-world scenario but suffices for this project's scope.
-
-Remember to check for memory leaks and handle them appropriately, particularly when dealing with dynamically allocated memory.
-
-Good luck with your project!
