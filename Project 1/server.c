@@ -157,9 +157,20 @@ void handle_request(struct server_app *app, int client_socket) {
     strcpy(file_name, "index.html");
     } 
     else {
-        if ' ' in filename or '%' in filename:
-            new_filename = filename.replace(' ', '').replace('%', '')
-            os.rename(os.path.join(directory, filename), os.path.join(directory, new_filename))
+        char space_encoding[] = "%20";
+        char percent_encoding[] = "%25";
+
+        char *found = strstr(file_name, space_encoding);
+        while (found != NULL) {
+            strcpy(found, " ");
+            found = strstr(file_name, space_encoding);
+        }
+
+        found = strstr(file_name, percent_encoding);
+        while (found != NULL) {
+            strcpy(found, "%");
+            found = strstr(file_name, percent_encoding);
+        }
     }
 
     // TODO: Implement proxy and call the function under condition
